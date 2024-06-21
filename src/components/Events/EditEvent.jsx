@@ -1,25 +1,36 @@
-import { Link, useNavigate } from "react-router-dom";
+import {
+  Link,
+  redirect,
+  useNavigate,
+  useNavigation,
+  useSubmit,
+} from "react-router-dom";
 
 import Modal from "../UI/Modal.jsx";
 import EventForm from "./EventForm.jsx";
 import { useParams } from "react-router-dom";
 import { fetchEvent, queryClient, updateEvent } from "../../util/http.js";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import LoadingIndicator from "../UI/LoadingIndicator.jsx";
+// import LoadingIndicator from "../UI/LoadingIndicator.jsx";
 import ErrorBlock from "../UI/ErrorBlock.jsx";
 
 export default function EditEvent() {
   const navigate = useNavigate();
+  const navigation = useNavigation();
+  const submit = useSubmit();
   const { id } = useParams();
+
+  const isSubmitting = navigation.state === "submitting";
 
   const {
     data: event,
-    isPending,
+    // isPending,
     isError,
     error,
   } = useQuery({
     queryKey: ["events", id],
     queryFn: ({ signal }) => fetchEvent({ signal, id }),
+    staleTime: 10000,
   });
 
   const { mutate: updateEventHandler } = useMutation({
@@ -45,8 +56,10 @@ export default function EditEvent() {
   });
 
   function handleSubmit(formData) {
-    updateEventHandler({ id, event: formData });
-    navigate("../");
+    // updateEventHandler({ id, event: formData });
+    // navigate("../");
+
+    submit(formData, { method: "PUT" });
   }
 
   function handleClose() {
@@ -55,13 +68,13 @@ export default function EditEvent() {
 
   let content;
 
-  if (isPending) {
-    content = (
-      <div className="center">
-        <LoadingIndicator />
-      </div>
-    );
-  }
+  // if (isPending) {
+  //   content = (
+  //     <div className="center">
+  //       <LoadingIndicator />
+  //     </div>
+  //   );
+  // }
 
   if (isError) {
     content = (
@@ -88,12 +101,29 @@ export default function EditEvent() {
         <Link to="../" className="button-text">
           Cancel
         </Link>
-        <button type="submit" className="button">
-          Update
+        <button type="submit" className="button" disabled={isSubmitting}>
+          {isSubmitting ? "Saving..." : "Update"}
         </button>
       </EventForm>
     );
   }
 
   return <Modal onClose={handleClose}>{content}</Modal>;
+}
+
+export function loader({ params }) {
+  return queryClient.fetchQuery({
+    queryKey: ["events", params.id],
+    queryFn: ({ signal }) => fetchEvent({ signal, id: params.id }),
+  });
+}
+
+export async function action({ request, params }) {
+  const formData = await request.formData();
+  const updatedEventData = Object.fromEntries(formData);
+
+  await updateEvent({ id: params.id, event: updatedEventData });
+  await queryClient.invalidateQueries(["events"]);
+
+  return redirect("../");
 }
